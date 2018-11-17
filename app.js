@@ -3,6 +3,7 @@ const client = new Discord.Client();
 const config = require('./config.json');
 const commands = require('./modules/commands.js');
 const FH = require('./modules/fileHandler.js')
+client.config = config;
 
 var dataHandlers = {
   channels: new FH("./data/channels.json"),

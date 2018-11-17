@@ -4,10 +4,9 @@ module.exports = {
         parameters: [],
         method: function (message, data) {
             let response = "";
-            if (message.guild && !data['channels'].data[message.channel.id]) {
-                return;// If this channel is not set up for prompts, do not respond.
-            }
-            else {
+            if (isPromptChannel(message, data) == false) {
+                return; // If this channel is not set up for prompts, do not respond.
+            } else {
                 if (message.guild) {
                     /*TO DO:
                     check if time has elapsed.
@@ -27,8 +26,8 @@ module.exports = {
         parameters: [],
         method: function (message, data) {
 
-            if (message.guild && data['channels'].data[message.channel.id]) {
-                return;// If this channel is not set up for prompts, do not respond.
+            if (isPromptChannel(message, data) == false) {
+                return; // If this channel is not set up for prompts, do not respond.
             }
 
             /* TO DO:
@@ -40,7 +39,9 @@ module.exports = {
         description: "Mark or unmark this channel as available for entering prompts.",
         parameters: [],
         method: function (message, data) {
-            if (message.guild == undefined) { return; }
+            if (message.guild == undefined) {
+                return;
+            }
 
             let member = message.member;
             let channel = message.channel;
@@ -48,14 +49,11 @@ module.exports = {
             if (channel.permissionsFor(member).has("MANAGE_MESSAGES")) {
                 if (data['channels'].data[channel.id]) {
                     data['channels'].data[channel.id] = false;
-                }
-                else {
+                } else {
                     data['channels'].data[channel.id] = true;
                 }
                 channel.send(`Channel ${data['channels'].data[channel.id] ? "marked" : "unmarked"} for prompts!`);
-            }
-            else
-            {
+            } else {
                 channel.send("You do not have the 'Manage Messages' permission for this channel and therefore can't mark it.");
             }
 
@@ -65,8 +63,11 @@ module.exports = {
         description: "Use this to submit a prompt.",
         parameters: ["prompt"],
         method: function (message, data, filteredcontent) {
+            if (message.guild) {
+                return;
+            }
+
             /*
-            only private messages
 
             check if the user has available prompt slots
             filter out mentions
@@ -79,9 +80,11 @@ module.exports = {
         description: "Check your prompts.",
         parameters: [],
         method: function (message, data) {
-            /*
-            only private messages
+            if (message.guild) {
+                return;
+            }
 
+            /*
             show all prompts from that user
             */
         }
@@ -90,13 +93,17 @@ module.exports = {
         description: "Sends some feedback to the bot developer.",
         parameters: ["message"],
         method: function (message, data, filteredcontent) {
-            client.fetchUser(config.botowner, true)
+            if (isPromptChannel(message, data))
+                message.client.fetchUser(message.client.config.botowner, true)
                 .then((user) => {
-                    user.send(`<@${message.author}>: ${filteredcontent}`).then(null, null);//TO DO: proper error handling
-                })
-                .catch(
-                    //TO DO: proper error handling
-                )
+                    user.send(`${message.author}: ${filteredcontent}`).then(() => {
+                        message.channel.send("I've passed along your feedback.")
+                    }).catch();
+                }).catch();
         }
     }
+}
+
+function isPromptChannel(message, data) {
+    return (message.guild == undefined || data['channels'].data[message.channel.id] === true)
 }
