@@ -19,9 +19,16 @@ function saveIntervalElapsed() {
   }
 }
 
+function promptPriorityUpdateElapsed() {
+  print(`Updating priority of prompts.`);
+  dataHandlers[prompts].data.forEach((a)=>{a.priority = a.priority++;})
+  print(`${dataHandlers[prompts].data.length} prompts updated.`);
+}
+
 client.on('ready', () => {
   print(`Logged in as ${client.user.tag}!`);
   setInterval(saveIntervalElapsed, 1000 * 60 * 5);//save data every 5 minutes to disk.
+  setInterval(promptPriorityUpdateElapsed, 1000 * 60 *60 * 24);//bump prompts up every day.
   client.user.setPresence({ game: { name: config.status }, status: 'online' })
     .then(print(`Presence set to: "${config.status}"`))
     .catch(console.error);
