@@ -8,8 +8,8 @@ module.exports = {
                 return; // If this channel is not set up for prompts, do not respond.
             } else {
                 if (message.guild) {
-                    if(data['channels'].data[message.channel.id].timestamp + (3*60*60*1000) > Date.now()){
-                        message.reply("Please wait atleast 3 hours until asking for a new prompt.");
+                    if(canPrompt(message,)){
+                        message.reply("Please wait atleast 1 hour until asking for a new prompt.");
                         return;
                     }
                 }
@@ -25,43 +25,51 @@ module.exports = {
             candidates = candidates.filter((a)=>{return a.priority==x});
             let prompt = candidates[Math.floor(Math.random()*candidates.length)];
 
-            message.channel.send(`${message.guild?"<@&277083656269594624>":""} ${prompt.message}\n*by ${prompt.author}.*`,{disableEveryone:true})
+            message.channel.send(`${message.guild?"<@&277083656269594624>":""} ${prompt.message}\n*by ${prompt.pingable? `<@${prompt.author}>`: prompt.author}.`,{disableEveryone:true})
             .then((promptMessage)=>{
+                promptMessage.prompt = prompt;
                 if(message.guild){
+                    data['prompts'].splice(data[`prompts`].data.indexOf(prompt),1);
                     promptMessage.react("👍").then(()=>promptMessage.react("👎")).then(()=>promptMessage.react("🚫"));
-                    //This feels ... wrong. I feel like I've violated a part of coding ethics by putting emoji in it.
-                    data['channels'].data[message.channel.id].timestamp = Date.now();
-                    data['channels'].data[message.channel.id].messageId = promptMessage.id;
-                    
-                    let thumbFilter =  (reaction) => {return ['👍', '👎'].includes(reaction.emoji.name)}
-                    let deleteFilter = (reaction,user) => {return reaction.emoji.name=="🚫" && (message.author.id === user.id || message.channel.permissionsFor(user).has('MANAGE_MESSAGES'))};
+                    unreadyPrompt(promptMessage,data);
 
+                    let thumbDownFilter = (reaction) => {return reaction.emoji.name=="👍"}
+                    let deleteFilter = (reaction,user) => {return reaction.emoji.name=="👎" || (reaction.emoji.name=="🚫" && (message.author.id === user.id || message.channel.permissionsFor(user).has('MANAGE_MESSAGES')))};
+
+                    /* 🚫,👎 */
                     promptMessage.awaitReactions(deleteFilter,{time: 1000*60*5,errors:['time']})//first 5 minutes of deleting is special
                     .then((collected) => {
-                        promptMessage.delete();
-                        data['channels'].data[message.channel.id].timestamp = 0;
-                        data['channels'].data[message.channel.id].messageId = 0;
-                        })
+                        if(collected.some((reaction,index)=>{reaction.emoji.name == '🚫'}) || promptMessage.reactions.find("emoji.name",'👎').count >= 6 ) 
+                            promptMessage.delete();
+                            readyPrompt(promptMessage,data);
+                    })
                     .catch(()=>{
                         promptMessage.awaitReactions(deleteFilter,{time: 1000 * 60 * 25}) //for the remainder of half an hour
                         .then((collected)=>{
+                            if(collected.some((reaction,index)=>{reaction.emoji.name == '🚫'}) || promptMessage.reactions.find("emoji.name",'👎').count >= 6 ) 
                             let temp = promptMessage.content.replace("~~","");
                             promptMessage.edit(`~~${temp}~~`).then((x)=>{promptMessage.clearReactions().then(null,null)});
-                            data['channels'].data[message.channel.id].timestamp = 0;
-                            data['channels'].data[message.channel.id].messageId = 0;
+                            readyPrompt(promptMessage,data);
                         })
                     });
-
-                    //promptMessage.
-
+                    /* 👍 */
+                    promptMessage.awaitReactions(thumbUpFilter,{max:5,time: 1000 * 60 * 60})
+                    .then((collected)=>{
+                        if(collected.size >= 5)
+                            promptMessage.channel.send("I heard you all, prompt has been saved for later use!");
+                            readyPrompt(promptMessage,data);
+                            let newPrompt = prompt;
+                            newPrompt.author = "popular vote";
+                            newPrompt.pingable = false;
+                            addPrompt(newPrompt,data);
+                        })
+                    .catch(()=>{ //after an hour, just ready the channel.
+                        readyPrompt(promptMessage,data);
+                    })
                 }
             })
-
-            /* TO DO:
-            handle reacts
-            */
         }
-    },
+    },/*
     "generate": {
         description: "Generates a random prompt.",
         parameters: [],
@@ -70,12 +78,8 @@ module.exports = {
             if (isPromptChannel(message, data) == false) {
                 return; // If this channel is not set up for prompts, do not respond.
             }
-
-            /* TO DO:
-            everything
-            */
         }
-    },
+    },*/
     "markpromptchannel": {
         description: "Mark or unmark this channel as available for entering prompts.",
         parameters: [],
@@ -147,4 +151,18 @@ module.exports = {
 
 function isPromptChannel(message, data) {
     return (message.guild == undefined || data['channels'].data.hasOwnProperty(message.channel.id));
+}
+function readyPrompt(ourMessage, data){
+    data['channels'].data[ourMessage.channel.id].timestamp = 0;
+    data['channels'].data[ourMessage.channel.id].messageId = 0;
+}
+function unreadyPrompt(ourMessage, data){
+    data['channels'].data[ourMessage.channel.id].timestamp = Date.now();
+    data['channels'].data[ourMessage.channel.id].messageId = ourMessage.id;
+}
+function canPrompt(message,data){
+    return data['channels'].data[message.channel.id].timestamp + 1000* 60 * 60 < Date.now();
+}
+function addPrompt(prompt,data){
+    data["prompts"].data.push(prompt);
 }
